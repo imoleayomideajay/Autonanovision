@@ -1,16 +1,16 @@
 # Autonanovision
 
-A lightweight Streamlit app for quick nano/micro image inspection with basic morphology statistics.
+A lightweight Streamlit app for nano/micro image inspection with interactive size and shape statistics.
 
-## What it does
+## Features
 
-- Upload a microscopy or camera image.
-- Generates a grayscale view and applies adjustable sharpening.
-- Computes a Sobel-based edge map (NumPy only).
-- Segments bright regions and extracts connected components.
-- Reports size and shape statistics (area, perimeter, aspect ratio, circularity, bounding-box size).
+- Upload microscopy/camera images.
+- NumPy-based grayscale, sharpening, and Sobel edge maps.
+- Bright-region segmentation with connected-component extraction.
+- Per-object statistics: area, perimeter, bounding box, aspect ratio, circularity.
+- Optional component highlighting directly on the original image.
 
-## Local development
+## Run locally
 
 ```bash
 python -m pip install -r requirements.txt
