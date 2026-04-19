@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import deque
 import io
 
 import numpy as np

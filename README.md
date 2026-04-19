@@ -1,22 +1,38 @@
-# Autonanovision (Streamlit-ready)
+# Autonanovision
 
-This repository is configured to deploy on Streamlit.
+A lightweight Streamlit app for quick nano/micro image inspection with basic morphology statistics.
 
-## Local run
+## What it does
+
+- Upload a microscopy or camera image.
+- Generates a grayscale view and applies adjustable sharpening.
+- Computes a Sobel-based edge map (NumPy only).
+- Segments bright regions and extracts connected components.
+- Reports size and shape statistics (area, perimeter, aspect ratio, circularity, bounding-box size).
+
+## Local development
 
 ```bash
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 streamlit run app.py
 ```
 
-## Deploy on Streamlit Community Cloud
+Open the local URL shown by Streamlit (usually `http://localhost:8501`).
 
-1. Push this repository to GitHub.
-2. In Streamlit Community Cloud, create a new app from the repo.
-3. Set **Main file path** to `app.py`.
+## Streamlit Community Cloud deployment
+
+1. Push this repo to GitHub.
+2. In Streamlit Community Cloud, create a new app from this repository.
+3. Use `app.py` as the **Main file path**.
 4. Deploy.
 
-## Files added for deployment
+## Project files
 
-- `app.py` — Streamlit entrypoint.
-- `requirements.txt` — Python dependencies for deployment.
+- `app.py` – Streamlit entrypoint and image-analysis UI.
+- `requirements.txt` – deployment/runtime dependencies.
+- `.streamlit/config.toml` – Streamlit runtime/theme config.
+
+## Notes
+
+- Shape stats are pixel-based unless you apply instrument calibration.
+- You can tune percentile and minimum-component filters from the sidebar to stabilize segmentation.
