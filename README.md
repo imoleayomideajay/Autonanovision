@@ -18,21 +18,22 @@ python -m pip install -r requirements.txt
 streamlit run app.py
 ```
 
-## Run tests
+Open the local URL shown by Streamlit (usually `http://localhost:8501`).
 
-```bash
-python -m unittest discover -s tests -p 'test_*.py'
-```
+## Streamlit Community Cloud deployment
 
-## Deploy to Streamlit Community Cloud
-
-1. Push this repository to GitHub.
-2. Create a new Streamlit app.
-3. Set **Main file path** to `app.py`.
+1. Push this repo to GitHub.
+2. In Streamlit Community Cloud, create a new app from this repository.
+3. Use `app.py` as the **Main file path**.
 4. Deploy.
 
-## Layout
+## Project files
 
-- `app.py` – Streamlit user interface.
-- `autonanovision/analysis.py` – pure processing/statistics functions.
-- `tests/test_analysis.py` – basic unit tests for analysis utilities.
+- `app.py` – Streamlit entrypoint and image-analysis UI.
+- `requirements.txt` – deployment/runtime dependencies.
+- `.streamlit/config.toml` – Streamlit runtime/theme config.
+
+## Notes
+
+- Shape stats are pixel-based unless you apply instrument calibration.
+- You can tune percentile and minimum-component filters from the sidebar to stabilize segmentation.
