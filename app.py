@@ -92,7 +92,22 @@ else:
                 "circularity": round(comp["circularity"], 3),
             }
         )
+
     st.dataframe(rows, use_container_width=True)
+
+    st.subheader("Component graphs")
+    top_n = min(20, len(components))
+    top_components = components[:top_n]
+    st.caption("Top components by area (descending).")
+    st.bar_chart({"area_px": [c["area_px"] for c in top_components]})
+
+    st.caption("Circularity trend for top components.")
+    st.line_chart({"circularity": [c["circularity"] for c in top_components]})
+
+# Global intensity graph
+hist_counts, _ = np.histogram(gray, bins=32)
+st.subheader("Grayscale intensity distribution")
+st.area_chart({"pixels": hist_counts.tolist()})
 
 st.markdown("---")
 st.write("Tip: set your microscope calibration to convert pixel statistics to real-world units.")
