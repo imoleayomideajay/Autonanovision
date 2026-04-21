@@ -4,9 +4,7 @@ import numpy as np
 import streamlit as st
 
 from autonanovision.analysis import (
-    components_csv,
     connected_components,
-    enrich_components,
     label_overlay,
     load_image,
     normalize_uint8,
