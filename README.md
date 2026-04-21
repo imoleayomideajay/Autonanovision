@@ -1,15 +1,16 @@
 # Autonanovision
 
-A lightweight Streamlit app for nano/micro image inspection with interactive size and shape statistics.
+A Streamlit app for nano/micro image quality control with interactive segmentation and calibrated morphology analytics.
 
 ## Features
 
 - Upload microscopy/camera images.
 - NumPy-based grayscale, sharpening, and Sobel edge maps.
-- Bright-region segmentation with connected-component extraction.
+- Segmentation using either percentile thresholding or Otsu auto-thresholding.
 - Per-object statistics: area, perimeter, bounding box, aspect ratio, circularity.
-- Optional component highlighting directly on the original image.
+- Optional microscope calibration (`µm/px`) to derive physical units (`µm`, `µm²`).
 - Built-in graphs for component area/circularity and grayscale intensity distribution.
+- One-click CSV export of component statistics.
 
 ## Run locally
 
@@ -18,22 +19,21 @@ python -m pip install -r requirements.txt
 streamlit run app.py
 ```
 
-Open the local URL shown by Streamlit (usually `http://localhost:8501`).
+## Run tests
 
-## Streamlit Community Cloud deployment
+```bash
+python -m unittest discover -s tests -p 'test_*.py'
+```
 
-1. Push this repo to GitHub.
-2. In Streamlit Community Cloud, create a new app from this repository.
-3. Use `app.py` as the **Main file path**.
+## Deploy to Streamlit Community Cloud
+
+1. Push this repository to GitHub.
+2. Create a new Streamlit app.
+3. Set **Main file path** to `app.py`.
 4. Deploy.
 
-## Project files
+## Layout
 
-- `app.py` – Streamlit entrypoint and image-analysis UI.
-- `requirements.txt` – deployment/runtime dependencies.
-- `.streamlit/config.toml` – Streamlit runtime/theme config.
-
-## Notes
-
-- Shape stats are pixel-based unless you apply instrument calibration.
-- You can tune percentile and minimum-component filters from the sidebar to stabilize segmentation.
+- `app.py` – Streamlit user interface and dashboards.
+- `autonanovision/analysis.py` – reusable image-processing/statistics core.
+- `tests/test_analysis.py` – unit tests for analysis logic.

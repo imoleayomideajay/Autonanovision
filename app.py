@@ -17,14 +17,20 @@ from autonanovision.analysis import (
 st.set_page_config(page_title="Autonanovision", page_icon="🔬", layout="wide")
 
 st.title("🔬 Autonanovision")
-st.caption("Nano-imaging sandbox: upload an image and inspect edges plus size/shape statistics.")
+st.caption("Production-ready nano/micro image QC: edges, segmentation, calibrated size/shape stats, and exports.")
 
 with st.sidebar:
     st.header("Analysis controls")
     edge_percentile = st.slider("Edge highlight percentile", min_value=50, max_value=99, value=85)
     sharpen_strength = st.slider("Sharpen strength", min_value=0.0, max_value=2.0, value=0.8, step=0.1)
-    mask_percentile = st.slider("Bright region percentile", min_value=50, max_value=99, value=80)
-    min_component_pixels = st.slider("Minimum component size (px)", min_value=10, max_value=5000, value=200, step=10)
+    threshold_method = st.radio("Threshold method", options=["percentile", "otsu"], horizontal=True)
+    mask_percentile = st.slider("Bright region percentile", min_value=50, max_value=99, value=80, disabled=threshold_method == "otsu")
+    min_component_pixels = st.slider("Minimum component size (px)", min_value=10, max_value=10000, value=200, step=10)
+
+    st.header("Calibration (optional)")
+    microns_per_pixel = st.number_input(
+        "Microns per pixel (µm/px)", min_value=0.0, value=0.0, step=0.01, help="Set > 0 to output calibrated units."
+    )
 
 uploaded = st.file_uploader("Upload microscopy or camera image", type=["png", "jpg", "jpeg", "tif", "tiff"])
 
@@ -40,13 +46,16 @@ edges = sobel_edges(gray)
 edge_threshold = np.percentile(edges, edge_percentile)
 edge_mask = (edges >= edge_threshold).astype(np.uint8) * 255
 
-binary_mask = threshold_mask(sharpened, mask_percentile)
+binary_mask = threshold_mask(sharpened, percentile=mask_percentile, method=threshold_method)
 labels, components = connected_components(binary_mask, min_component_pixels)
+rows = enrich_components(components, microns_per_pixel)
 
 component_ids = [int(component["label"]) for component in components]
+default_selected = component_ids[0] if component_ids else None
 selected_label = st.selectbox(
     "Highlight component",
     options=[None] + component_ids,
+    index=([None] + component_ids).index(default_selected) if default_selected is not None else 0,
     format_func=lambda x: "None" if x is None else f"Label {x}",
 )
 overlay = label_overlay(image, labels, selected_label)
@@ -75,34 +84,34 @@ k3.metric("Edge density", f"{edge_density:.2f}%")
 k4.metric("Components", f"{len(components)}")
 
 st.subheader("Size and shape statistics")
-if not components:
+if not rows:
     st.warning("No components found with current threshold/settings.")
 else:
-    rows = []
-    for idx, comp in enumerate(components[:50], start=1):
-        rows.append(
-            {
-                "rank": idx,
-                "label": int(comp["label"]),
-                "area_px": int(comp["area_px"]),
-                "perimeter_px": int(comp["perimeter_px"]),
-                "bbox_w_px": int(comp["bbox_width_px"]),
-                "bbox_h_px": int(comp["bbox_height_px"]),
-                "aspect_ratio": round(comp["aspect_ratio"], 3),
-                "circularity": round(comp["circularity"], 3),
-            }
-        )
+    mean_area = np.mean([r["area_px"] for r in rows])
+    median_area = np.median([r["area_px"] for r in rows])
+    mean_circularity = np.mean([r["circularity"] for r in rows])
+
+    s1, s2, s3 = st.columns(3)
+    s1.metric("Mean area (px²)", f"{mean_area:.1f}")
+    s2.metric("Median area (px²)", f"{median_area:.1f}")
+    s3.metric("Mean circularity", f"{mean_circularity:.3f}")
 
     st.dataframe(rows, use_container_width=True)
 
+    st.download_button(
+        "Download component statistics (CSV)",
+        data=components_csv(rows),
+        file_name="autonanovision_components.csv",
+        mime="text/csv",
+    )
+
     st.subheader("Component graphs")
-    top_n = min(20, len(components))
-    top_components = components[:top_n]
+    top_n = min(20, len(rows))
     st.caption("Top components by area (descending).")
-    st.bar_chart({"area_px": [c["area_px"] for c in top_components]})
+    st.bar_chart({"area_px": [r["area_px"] for r in rows[:top_n]]})
 
     st.caption("Circularity trend for top components.")
-    st.line_chart({"circularity": [c["circularity"] for c in top_components]})
+    st.line_chart({"circularity": [r["circularity"] for r in rows[:top_n]]})
 
 # Global intensity graph
 hist_counts, _ = np.histogram(gray, bins=32)
@@ -110,4 +119,7 @@ st.subheader("Grayscale intensity distribution")
 st.area_chart({"pixels": hist_counts.tolist()})
 
 st.markdown("---")
-st.write("Tip: set your microscope calibration to convert pixel statistics to real-world units.")
+if microns_per_pixel > 0:
+    st.success(f"Calibration active: 1 px = {microns_per_pixel:.4f} µm.")
+else:
+    st.info("Tip: set microscope calibration to get physical units (µm, µm²) in the table export.")
