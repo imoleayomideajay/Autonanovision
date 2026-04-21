@@ -168,41 +168,28 @@ def connected_components(mask: np.ndarray, min_pixels: int) -> tuple[np.ndarray,
     return labels, components
 
 
-def enrich_components(components: list[dict[str, float]], microns_per_pixel: float | int | str) -> list[dict[str, Any]]:
+def enrich_components(components: list[dict[str, float]], microns_per_pixel: float) -> list[dict[str, Any]]:
     """Return component rows with optional calibrated real-world units."""
     rows: list[dict[str, Any]] = []
-
-    try:
-        scale = float(microns_per_pixel)
-    except (TypeError, ValueError):
-        scale = 0.0
-
-    has_calibration = scale > 0
+    has_calibration = microns_per_pixel > 0
 
     for idx, comp in enumerate(components[:100], start=1):
-        area_px = float(comp.get("area_px", 0.0))
-        perimeter_px = float(comp.get("perimeter_px", 0.0))
-        bbox_width_px = float(comp.get("bbox_width_px", 0.0))
-        bbox_height_px = float(comp.get("bbox_height_px", 0.0))
-        aspect_ratio = float(comp.get("aspect_ratio", 0.0))
-        circularity = float(comp.get("circularity", 0.0))
-
         row: dict[str, Any] = {
             "rank": idx,
-            "label": int(float(comp.get("label", idx))),
-            "area_px": int(area_px),
-            "perimeter_px": int(perimeter_px),
-            "bbox_w_px": int(bbox_width_px),
-            "bbox_h_px": int(bbox_height_px),
-            "aspect_ratio": round(aspect_ratio, 3),
-            "circularity": round(circularity, 3),
+            "label": int(comp["label"]),
+            "area_px": int(comp["area_px"]),
+            "perimeter_px": int(comp["perimeter_px"]),
+            "bbox_w_px": int(comp["bbox_width_px"]),
+            "bbox_h_px": int(comp["bbox_height_px"]),
+            "aspect_ratio": round(comp["aspect_ratio"], 3),
+            "circularity": round(comp["circularity"], 3),
         }
 
         if has_calibration:
-            row["area_um2"] = round(area_px * (scale**2), 3)
-            row["perimeter_um"] = round(perimeter_px * scale, 3)
-            row["bbox_w_um"] = round(bbox_width_px * scale, 3)
-            row["bbox_h_um"] = round(bbox_height_px * scale, 3)
+            row["area_um2"] = round(comp["area_px"] * (microns_per_pixel**2), 3)
+            row["perimeter_um"] = round(comp["perimeter_px"] * microns_per_pixel, 3)
+            row["bbox_w_um"] = round(comp["bbox_width_px"] * microns_per_pixel, 3)
+            row["bbox_h_um"] = round(comp["bbox_height_px"] * microns_per_pixel, 3)
 
         rows.append(row)
 
