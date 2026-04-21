@@ -37,3 +37,8 @@ python -m unittest discover -s tests -p 'test_*.py'
 - `app.py` – Streamlit user interface and dashboards.
 - `autonanovision/analysis.py` – reusable image-processing/statistics core.
 - `tests/test_analysis.py` – unit tests for analysis logic.
+
+
+## Deployment notes
+
+- `runtime.txt` pins Python 3.11 for Streamlit Cloud compatibility.

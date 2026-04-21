@@ -63,6 +63,15 @@ class AnalysisTests(unittest.TestCase):
         self.assertAlmostEqual(rows[0]["area_um2"], 25.0)
         self.assertAlmostEqual(rows[0]["perimeter_um"], 10.0)
 
+
+    def test_enrich_components_invalid_calibration_does_not_crash(self):
+        rows = enrich_components(
+            [{"label": 1.0, "area_px": 9.0, "perimeter_px": 12.0, "bbox_width_px": 3.0, "bbox_height_px": 3.0}],
+            microns_per_pixel="invalid",
+        )
+        self.assertEqual(rows[0]["area_px"], 9)
+        self.assertNotIn("area_um2", rows[0])
+
     def test_csv_export(self):
         csv_text = components_csv([{"rank": 1, "label": 1, "area_px": 10}])
         self.assertIn("rank,label,area_px", csv_text)

@@ -4,7 +4,9 @@ import numpy as np
 import streamlit as st
 
 from autonanovision.analysis import (
+    components_csv,
     connected_components,
+    enrich_components,
     label_overlay,
     load_image,
     normalize_uint8,
@@ -48,7 +50,11 @@ edge_mask = (edges >= edge_threshold).astype(np.uint8) * 255
 
 binary_mask = threshold_mask(sharpened, percentile=mask_percentile, method=threshold_method)
 labels, components = connected_components(binary_mask, min_component_pixels)
-rows = enrich_components(components, microns_per_pixel)
+try:
+    rows = enrich_components(components, microns_per_pixel)
+except Exception as exc:
+    st.error(f"Failed to build calibrated component table: {exc}")
+    rows = enrich_components(components, 0.0)
 
 component_ids = [int(component["label"]) for component in components]
 default_selected = component_ids[0] if component_ids else None
