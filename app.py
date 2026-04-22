@@ -4,6 +4,18 @@ import numpy as np
 import streamlit as st
 
 import autonanovision.analysis as analysis
+from autonanovision.analysis import (
+    components_csv,
+    connected_components,
+    enrich_components,
+    label_overlay,
+    load_image,
+    normalize_uint8,
+    sharpen,
+    sobel_edges,
+    threshold_mask,
+    to_grayscale,
+)
 
 st.set_page_config(page_title="Autonanovision", page_icon="🔬", layout="wide")
 
@@ -29,21 +41,21 @@ if uploaded is None:
     st.info("Upload an image to begin analysis.")
     st.stop()
 
-image = analysis.load_image(uploaded)
-gray = analysis.to_grayscale(image)
-sharpened = analysis.sharpen(gray, sharpen_strength)
-edges = analysis.sobel_edges(gray)
+image = load_image(uploaded)
+gray = to_grayscale(image)
+sharpened = sharpen(gray, sharpen_strength)
+edges = sobel_edges(gray)
 
 edge_threshold = np.percentile(edges, edge_percentile)
 edge_mask = (edges >= edge_threshold).astype(np.uint8) * 255
 
-binary_mask = analysis.threshold_mask(sharpened, percentile=mask_percentile, method=threshold_method)
-labels, components = analysis.connected_components(binary_mask, min_component_pixels)
+binary_mask = threshold_mask(sharpened, percentile=mask_percentile, method=threshold_method)
+labels, components = connected_components(binary_mask, min_component_pixels)
 try:
-    rows = analysis.enrich_components(components, microns_per_pixel)
+    rows = enrich_components(components, microns_per_pixel)
 except Exception as exc:
     st.error(f"Failed to build calibrated component table: {exc}")
-    rows = analysis.enrich_components(components, 0.0)
+    rows = enrich_components(components, 0.0)
 
 component_ids = [int(component["label"]) for component in components]
 default_selected = component_ids[0] if component_ids else None
@@ -53,7 +65,7 @@ selected_label = st.selectbox(
     index=([None] + component_ids).index(default_selected) if default_selected is not None else 0,
     format_func=lambda x: "None" if x is None else f"Label {x}",
 )
-overlay = analysis.label_overlay(image, labels, selected_label)
+overlay = label_overlay(image, labels, selected_label)
 
 col1, col2, col3 = st.columns(3)
 with col1:
@@ -61,7 +73,7 @@ with col1:
     st.image(image, use_container_width=True)
 with col2:
     st.subheader("Sharpened grayscale")
-    st.image(analysis.normalize_uint8(sharpened), use_container_width=True, clamp=True)
+    st.image(normalize_uint8(sharpened), use_container_width=True, clamp=True)
 with col3:
     st.subheader("Edge map")
     st.image(edge_mask, use_container_width=True, clamp=True)
@@ -95,7 +107,7 @@ else:
 
     st.download_button(
         "Download component statistics (CSV)",
-        data=analysis.components_csv(rows),
+        data=components_csv(rows),
         file_name="autonanovision_components.csv",
         mime="text/csv",
     )
