@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 import streamlit as st
 
+import autonanovision.analysis as analysis
 from autonanovision.analysis import (
     components_csv,
     connected_components,
