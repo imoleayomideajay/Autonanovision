@@ -17,6 +17,23 @@ def to_grayscale(image: np.ndarray) -> np.ndarray:
     return (0.299 * rgb[..., 0]) + (0.587 * rgb[..., 1]) + (0.114 * rgb[..., 2])
 
 
+def auto_select_grayscale(image: np.ndarray) -> np.ndarray:
+    """Automatically select the most informative grayscale projection."""
+    if image.ndim == 2:
+        return image.astype(np.float32)
+
+    channels = image[..., :3].astype(np.float32)
+    weighted = to_grayscale(image)
+    candidates = [weighted, channels[..., 0], channels[..., 1], channels[..., 2], channels.mean(axis=2)]
+    scores = []
+    for candidate in candidates:
+        # Favor projections with strong spread and gradient signal.
+        contrast = float(candidate.std())
+        gradient = float(np.mean(sobel_edges(candidate)))
+        scores.append(contrast + (0.25 * gradient))
+    return candidates[int(np.argmax(scores))]
+
+
 def sobel_edges(gray: np.ndarray) -> np.ndarray:
     """Compute edge intensity with a Sobel operator using NumPy only."""
     padded = np.pad(gray, ((1, 1), (1, 1)), mode="reflect")
@@ -196,6 +213,7 @@ def enrich_components(components: list[dict[str, float]], microns_per_pixel: Uni
             "bbox_h_px": int(bbox_height_px),
             "aspect_ratio": round(aspect_ratio, 3),
             "circularity": round(circularity, 3),
+            "equivalent_diameter_px": round(float(np.sqrt((4 * area_px) / np.pi)) if area_px > 0 else 0.0, 3),
         }
 
         if has_calibration:
@@ -203,6 +221,7 @@ def enrich_components(components: list[dict[str, float]], microns_per_pixel: Uni
             row["perimeter_um"] = round(perimeter_px * scale, 3)
             row["bbox_w_um"] = round(bbox_width_px * scale, 3)
             row["bbox_h_um"] = round(bbox_height_px * scale, 3)
+            row["equivalent_diameter_um"] = round(row["equivalent_diameter_px"] * scale, 3)
 
         rows.append(row)
 
@@ -218,6 +237,34 @@ def components_csv(rows: list[dict[str, Any]]) -> str:
     writer.writeheader()
     writer.writerows(rows)
     return buffer.getvalue()
+
+
+def filter_component_rows_by_size(
+    rows: list[dict[str, Any]],
+    min_size_um: float,
+    max_size_um: float,
+    microns_per_pixel: Union[float, int, str],
+) -> list[dict[str, Any]]:
+    """Filter components by manufacturer particle size range in µm."""
+    try:
+        scale = float(microns_per_pixel)
+    except (TypeError, ValueError):
+        return rows
+    if scale <= 0:
+        return rows
+    if min_size_um <= 0 and max_size_um <= 0:
+        return rows
+
+    lo = float(min(min_size_um, max_size_um))
+    hi = float(max(min_size_um, max_size_um))
+    filtered: list[dict[str, Any]] = []
+    for row in rows:
+        diameter = row.get("equivalent_diameter_um")
+        if diameter is None:
+            diameter = float(row.get("equivalent_diameter_px", 0.0)) * scale
+        if lo <= float(diameter) <= hi:
+            filtered.append(row)
+    return filtered
 
 
 def label_overlay(image: np.ndarray, labels: np.ndarray, highlight_label: Optional[int]) -> np.ndarray:
