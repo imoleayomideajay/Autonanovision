@@ -3,9 +3,11 @@ import unittest
 import numpy as np
 
 from autonanovision.analysis import (
+    auto_select_grayscale,
     components_csv,
     connected_components,
     enrich_components,
+    filter_component_rows_by_size,
     label_overlay,
     otsu_threshold,
     threshold_mask,
@@ -24,6 +26,12 @@ class AnalysisTests(unittest.TestCase):
         mask = threshold_mask(gray, percentile=50, method="percentile")
         self.assertTrue(mask[1, 0])
         self.assertTrue(mask[1, 1])
+
+    def test_auto_select_grayscale_returns_2d(self):
+        image = np.zeros((8, 8, 3), dtype=np.uint8)
+        image[:, :, 1] = 255
+        gray = auto_select_grayscale(image)
+        self.assertEqual(gray.shape, (8, 8))
 
     def test_otsu_threshold_returns_valid_range(self):
         gray = np.zeros((10, 10), dtype=np.float32)
@@ -76,6 +84,15 @@ class AnalysisTests(unittest.TestCase):
         csv_text = components_csv([{"rank": 1, "label": 1, "area_px": 10}])
         self.assertIn("rank,label,area_px", csv_text)
         self.assertIn("1,1,10", csv_text)
+
+    def test_filter_component_rows_by_size(self):
+        rows = [
+            {"label": 1, "equivalent_diameter_px": 4.0, "equivalent_diameter_um": 2.0},
+            {"label": 2, "equivalent_diameter_px": 12.0, "equivalent_diameter_um": 6.0},
+        ]
+        filtered = filter_component_rows_by_size(rows, min_size_um=1.5, max_size_um=3.0, microns_per_pixel=0.5)
+        self.assertEqual(len(filtered), 1)
+        self.assertEqual(filtered[0]["label"], 1)
 
     def test_label_overlay_marks_border(self):
         image = np.zeros((10, 10, 3), dtype=np.uint8)

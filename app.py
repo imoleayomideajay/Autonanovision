@@ -5,8 +5,10 @@ import streamlit as st
 
 import autonanovision.analysis as analysis
 from autonanovision.analysis import (
+    auto_select_grayscale,
     components_csv,
     connected_components,
+    filter_component_rows_by_size,
     enrich_components,
     label_overlay,
     load_image,
@@ -24,11 +26,15 @@ st.caption("Production-ready nano/micro image QC: edges, segmentation, calibrate
 
 with st.sidebar:
     st.header("Analysis controls")
+    known_particle_size_um = st.slider("Known particle size (µm)", min_value=0.1, max_value=200.0, value=10.0, step=0.1)
     edge_percentile = st.slider("Edge highlight percentile", min_value=50, max_value=99, value=85)
     sharpen_strength = st.slider("Sharpen strength", min_value=0.0, max_value=2.0, value=0.8, step=0.1)
-    threshold_method = st.radio("Threshold method", options=["percentile", "otsu"], horizontal=True)
+    threshold_method = st.radio("Threshold method", options=["auto", "percentile", "otsu"], horizontal=True)
     mask_percentile = st.slider("Bright region percentile", min_value=50, max_value=99, value=80, disabled=threshold_method == "otsu")
     min_component_pixels = st.slider("Minimum component size (px)", min_value=10, max_value=10000, value=200, step=10)
+    st.header("Manufacturer size filter (optional)")
+    manufacturer_min_um = st.number_input("Min particle size (µm)", min_value=0.0, value=0.0, step=0.1)
+    manufacturer_max_um = st.number_input("Max particle size (µm)", min_value=0.0, value=0.0, step=0.1)
 
     st.header("Calibration (optional)")
     microns_per_pixel = st.number_input(
@@ -42,17 +48,32 @@ if uploaded is None:
     st.stop()
 
 image = load_image(uploaded)
-gray = to_grayscale(image)
+gray_default = to_grayscale(image)
+gray = auto_select_grayscale(image)
 sharpened = sharpen(gray, sharpen_strength)
 edges = sobel_edges(gray)
 
-edge_threshold = np.percentile(edges, edge_percentile)
+edge_percentile_dynamic = edge_percentile
+if microns_per_pixel > 0 and known_particle_size_um > 0:
+    particle_px = known_particle_size_um / microns_per_pixel
+    edge_percentile_dynamic = int(np.clip(92 - (0.35 * particle_px), 60, 98))
+
+edge_threshold = np.percentile(edges, edge_percentile_dynamic)
 edge_mask = (edges >= edge_threshold).astype(np.uint8) * 255
 
-binary_mask = threshold_mask(sharpened, percentile=mask_percentile, method=threshold_method)
+effective_method = threshold_method
+effective_percentile = mask_percentile
+if threshold_method == "auto":
+    contrast = float(gray.std())
+    effective_method = "otsu" if contrast > 18 else "percentile"
+    if effective_method == "percentile":
+        effective_percentile = int(np.clip(75 + (contrast * 0.5), 70, 95))
+
+binary_mask = threshold_mask(sharpened, percentile=effective_percentile, method=effective_method)
 labels, components = connected_components(binary_mask, min_component_pixels)
 try:
     rows = enrich_components(components, microns_per_pixel)
+    rows = filter_component_rows_by_size(rows, manufacturer_min_um, manufacturer_max_um, microns_per_pixel)
 except Exception as exc:
     st.error(f"Failed to build calibrated component table: {exc}")
     rows = enrich_components(components, 0.0)
@@ -72,7 +93,7 @@ with col1:
     st.subheader("Original")
     st.image(image, use_container_width=True)
 with col2:
-    st.subheader("Sharpened grayscale")
+    st.subheader("Sharpened grayscale (auto-selected)")
     st.image(normalize_uint8(sharpened), use_container_width=True, clamp=True)
 with col3:
     st.subheader("Edge map")
@@ -80,6 +101,8 @@ with col3:
 
 st.subheader("Segmentation preview")
 st.image(overlay, use_container_width=True, caption="Selected component boundary shown in red")
+if gray_default.shape == gray.shape and np.any(gray_default != gray):
+    st.caption("Auto grayscale selected a channel/projection different from default RGB weights.")
 
 edge_density = float((edge_mask > 0).mean() * 100)
 contrast = float(gray.std())
@@ -89,6 +112,7 @@ k1.metric("Image size", f"{image.shape[1]}×{image.shape[0]}")
 k2.metric("Contrast (std)", f"{contrast:.2f}")
 k3.metric("Edge density", f"{edge_density:.2f}%")
 k4.metric("Components", f"{len(components)}")
+st.caption(f"Segmentation mode: **{effective_method}**. Edge percentile in use: **{edge_percentile_dynamic}**.")
 
 st.subheader("Size and shape statistics")
 if not rows:
