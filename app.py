@@ -29,8 +29,43 @@ with st.sidebar:
     known_particle_size_um = st.slider("Known particle size (µm)", min_value=0.1, max_value=200.0, value=10.0, step=0.1)
     edge_percentile = st.slider("Edge highlight percentile", min_value=50, max_value=99, value=85)
     sharpen_strength = st.slider("Sharpen strength", min_value=0.0, max_value=2.0, value=0.8, step=0.1)
-    threshold_method = st.radio("Threshold method", options=["auto", "percentile", "otsu"], horizontal=True)
-    mask_percentile = st.slider("Bright region percentile", min_value=50, max_value=99, value=80, disabled=threshold_method == "otsu")
+    threshold_method = st.selectbox(
+        "Threshold method",
+        options=["auto", "percentile", "otsu", "mean", "triangle", "li", "adaptive_mean"],
+        index=0,
+        help=(
+            "auto: pick percentile vs otsu by contrast • "
+            "percentile: bright-region cutoff • "
+            "otsu: between-class variance • "
+            "mean: global mean intensity • "
+            "triangle: Zack's triangle method (skewed histograms) • "
+            "li: iterative cross-entropy • "
+            "adaptive_mean: per-pixel local mean (handles uneven lighting)"
+        ),
+    )
+    mask_percentile = st.slider(
+        "Bright region percentile",
+        min_value=50,
+        max_value=99,
+        value=80,
+        disabled=threshold_method not in ("auto", "percentile"),
+    )
+    adaptive_window = st.slider(
+        "Adaptive window (px)",
+        min_value=3,
+        max_value=151,
+        value=31,
+        step=2,
+        disabled=threshold_method != "adaptive_mean",
+    )
+    adaptive_offset = st.slider(
+        "Adaptive offset",
+        min_value=-30.0,
+        max_value=30.0,
+        value=5.0,
+        step=0.5,
+        disabled=threshold_method != "adaptive_mean",
+    )
     min_component_pixels = st.slider("Minimum component size (px)", min_value=10, max_value=10000, value=200, step=10)
     st.header("Manufacturer size filter (optional)")
     manufacturer_min_um = st.number_input("Min particle size (µm)", min_value=0.0, value=0.0, step=0.1)
@@ -69,7 +104,13 @@ if threshold_method == "auto":
     if effective_method == "percentile":
         effective_percentile = int(np.clip(75 + (contrast * 0.5), 70, 95))
 
-binary_mask = threshold_mask(sharpened, percentile=effective_percentile, method=effective_method)
+binary_mask = threshold_mask(
+    sharpened,
+    percentile=effective_percentile,
+    method=effective_method,
+    adaptive_window=adaptive_window,
+    adaptive_offset=adaptive_offset,
+)
 labels, components = connected_components(binary_mask, min_component_pixels)
 try:
     rows = enrich_components(components, microns_per_pixel)

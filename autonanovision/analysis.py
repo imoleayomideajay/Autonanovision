@@ -107,17 +107,134 @@ def otsu_threshold(gray: np.ndarray) -> float:
     return float(threshold)
 
 
-def threshold_mask(gray: np.ndarray, percentile: Optional[int] = None, method: str = "percentile") -> np.ndarray:
-    """Build binary foreground mask from grayscale array."""
-    method = method.lower()
-    if method == "otsu":
-        threshold = otsu_threshold(gray)
-        return normalize_uint8(gray) >= threshold
+def mean_threshold(gray: np.ndarray) -> float:
+    """Threshold equal to the mean intensity of the image."""
+    return float(normalize_uint8(gray).mean())
 
-    if percentile is None:
-        raise ValueError("percentile must be provided for percentile threshold method")
-    threshold = np.percentile(gray, percentile)
-    return gray >= threshold
+
+def triangle_threshold(gray: np.ndarray) -> float:
+    """Compute Zack's triangle threshold from the intensity histogram."""
+    values = normalize_uint8(gray).ravel()
+    hist = np.bincount(values, minlength=256).astype(np.float64)
+    if hist.sum() == 0:
+        return 0.0
+
+    nonzero = np.flatnonzero(hist)
+    left, right = int(nonzero[0]), int(nonzero[-1])
+    peak = int(np.argmax(hist))
+
+    # Use the longer side from peak to a histogram end.
+    if (peak - left) >= (right - peak):
+        a, b = left, peak
+        flipped = False
+    else:
+        a, b = peak, right
+        flipped = True
+
+    if b == a:
+        return float(peak)
+
+    # Distance from each histogram point on [a, b] to the line connecting
+    # (a, hist[a]) and (b, hist[b]).
+    xs = np.arange(a, b + 1)
+    ys = hist[a:b + 1]
+    dx = b - a
+    dy = hist[b] - hist[a]
+    norm = np.hypot(dx, dy)
+    if norm == 0:
+        return float(peak)
+    distances = np.abs(dy * (xs - a) - dx * (ys - hist[a])) / norm
+
+    threshold = int(xs[int(np.argmax(distances))])
+    if flipped:
+        # When operating on the right side, Zack's method historically subtracts 1.
+        threshold = max(threshold - 1, 0)
+    return float(threshold)
+
+
+def li_threshold(gray: np.ndarray) -> float:
+    """Iterative cross-entropy (Li) threshold."""
+    values = normalize_uint8(gray).astype(np.float64).ravel()
+    tolerance = 0.5
+    t = float(values.mean())
+    for _ in range(64):
+        fg = values[values > t]
+        bg = values[values <= t]
+        if fg.size == 0 or bg.size == 0:
+            break
+        mean_fg = fg.mean()
+        mean_bg = bg.mean()
+        if mean_fg <= 0 or mean_bg <= 0:
+            break
+        new_t = (mean_fg - mean_bg) / (np.log(mean_fg) - np.log(mean_bg))
+        if abs(new_t - t) < tolerance:
+            t = new_t
+            break
+        t = new_t
+    return float(np.clip(t, 0, 255))
+
+
+def adaptive_mean_threshold(gray: np.ndarray, window: int = 31, offset: float = 5.0) -> np.ndarray:
+    """Local-mean adaptive threshold returning a per-pixel binary mask."""
+    img = normalize_uint8(gray).astype(np.float64)
+    if window < 3:
+        window = 3
+    if window % 2 == 0:
+        window += 1
+    pad = window // 2
+
+    padded = np.pad(img, ((pad, pad), (pad, pad)), mode="reflect")
+    integral = padded.cumsum(axis=0).cumsum(axis=1)
+    integral = np.pad(integral, ((1, 0), (1, 0)), mode="constant")
+
+    h, w = img.shape
+    r1 = np.arange(h)[:, None]
+    c1 = np.arange(w)[None, :]
+    r2 = r1 + window
+    c2 = c1 + window
+
+    total = (
+        integral[r2, c2]
+        - integral[r1, c2]
+        - integral[r2, c1]
+        + integral[r1, c1]
+    )
+    local_mean = total / (window * window)
+    return img >= (local_mean - offset)
+
+
+def threshold_mask(
+    gray: np.ndarray,
+    percentile: Optional[int] = None,
+    method: str = "percentile",
+    adaptive_window: int = 31,
+    adaptive_offset: float = 5.0,
+) -> np.ndarray:
+    """Build binary foreground mask from grayscale array.
+
+    Supported methods: percentile, otsu, mean, triangle, li, adaptive_mean.
+    """
+    method = method.lower()
+    normalized = normalize_uint8(gray)
+
+    if method == "otsu":
+        return normalized > otsu_threshold(gray)
+    if method == "mean":
+        return normalized > mean_threshold(gray)
+    if method == "triangle":
+        return normalized > triangle_threshold(gray)
+    if method == "li":
+        return normalized > li_threshold(gray)
+    if method == "adaptive_mean":
+        return adaptive_mean_threshold(gray, window=adaptive_window, offset=adaptive_offset)
+
+    if method == "percentile":
+        if percentile is None:
+            raise ValueError("percentile must be provided for percentile threshold method")
+        threshold = np.percentile(gray, percentile)
+        return gray > threshold
+
+    raise ValueError(f"Unknown threshold method: {method}")
 
 
 def connected_components(mask: np.ndarray, min_pixels: int) -> tuple[np.ndarray, list[dict[str, float]]]:
